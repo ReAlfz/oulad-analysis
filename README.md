@@ -5,5 +5,6 @@ The OULAD dataset contains open source, anonymized data of students, courses, as
 environments (VLE) clickstreams, allowing for analyses into the nexus of student behavior and outcomes.
 
 ## Database schema
-![alt test] (https://analyse.kmi.open.ac.uk/resources/images/model.png)
+
+![](https://analyse.kmi.open.ac.uk/resources/images/model.png)
 
