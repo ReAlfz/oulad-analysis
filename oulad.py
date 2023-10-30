@@ -1,169 +1,56 @@
-import numpy as np
 import pandas as pd
-import seaborn as sns
-import plotly.express as px
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 
-def student_info(data):
-    module_data = data.groupby('code_module') \
-        .agg({'id_student': 'count'}) \
-        .reset_index() \
-        .rename(columns={'code_module': 'Module', 'id_student': 'Quantity'})
+def preprocessing(data):
+    encode = LabelEncoder()
+    data['region'] = encode.fit_transform(data['region'])
+    data['highest_education'] = encode.fit_transform(data['highest_education'])
+    data['imd_band'] = encode.fit_transform(data['imd_band'])
+    data['age_band'] = encode.fit_transform(data['age_band'])
+    data['disability'] = encode.fit_transform(data['disability'])
+    data['final_result'] = encode.fit_transform(data['final_result'])
 
-    module_data['Percentage'] = module_data.apply(
-        lambda x: round(100 * (x['Quantity'] / module_data['Quantity'].sum()), 2),
-        axis=1
+    x = data.drop('final_result', axis=1)
+    y = data['final_result']
+
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, random_state=42)
+    x_train = x_train.values.reshape(x_train.shape[0], 1, x_train.shape[1])
+    x_test = x_test.values.reshape(x_test.shape[0], 1, x_test.shape[1])
+
+    return x_train, x_test, y_train, y_test
+
+
+def modeling(x_train, x_test, y_train, y_test):
+    model = Sequential([
+        LSTM(64, activation='relu', input_shape=(1, x_train.shape[2])),
+        Dense(64, activation='relu'),
+        Dense(1, activation='sigmoid')
+    ])
+
+    model.compile(
+        loss='binary_crossentropy',
+        optimizer='adam',
+        metrics=['acc']
     )
 
-    result_module = data.groupby(['code_module', 'final_result']) \
-        .agg({'id_student': 'count'}) \
-        .reset_index() \
-        .rename(columns={'code_module': 'Module', 'id_student': 'Quantity', 'final_result': 'Result'})
-
-    result_module['Percentage'] = result_module.apply(
-        lambda x: round(
-            100 * (x['Quantity'] / result_module[result_module['Result'] == x['Result']]['Quantity'].sum()), 2
-        ),
-        axis=1
-    )
-
-    print(f'Module:\n{module_data}\n\nresult percentage:\n{result_module}\n\n')
-
-    course_data = data.groupby('code_presentation') \
-        .agg({'id_student': 'count'}) \
-        .reset_index() \
-        .rename(columns={'code_presentation': 'Period', 'id_student': 'Quantity'})
-
-    course_data['Percentage'] = course_data.apply(
-        lambda x: round(100 * (x['Quantity'] / course_data['Quantity'].sum()), 2),
-        axis=1
-    )
-
-    result_course = data.groupby(['code_presentation', 'final_result']) \
-        .agg({'id_student': 'count'}) \
-        .reset_index() \
-        .rename(columns={'code_presentation': 'Period', 'id_student': 'Quantity', 'final_result': 'Result'})
-
-    result_course['Percentage'] = result_course.apply(
-        lambda x: round(
-            100 * (x['Quantity'] / result_course[result_course['Result'] == x['Result']]['Quantity'].sum()), 2
-        ),
-        axis=1
-    )
-
-    print(f'Period:\n{course_data}\n\nresult percentage:\n{result_course}\n\n')
-
-    return module_data, result_module, course_data, result_course
-
-
-def visualization1(module_data, result_module):
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('Module Distribution', 'Result Distribution'))
-    colors_scale = {
-        'AAA': 'blue',
-        'BBB': 'orange',
-        'CCC': 'green',
-        'DDD': 'red',
-        'EEE': 'purple',
-        'FFF': 'brown',
-        'GGG': 'yellow',
-    }
-
-    fig.add_trace(
-        go.Bar(
-            x=module_data['Module'],
-            y=module_data['Quantity'],
-            text=module_data['Percentage'],
-            hoverinfo='x+y+text',
-            marker=dict(color=[colors_scale[color] for color in module_data['Module']]),
-            textposition='auto'
-        ), row=1, col=1)
-
-    fig.add_trace(
-        go.Bar(
-            x=result_module['Result'],
-            y=result_module['Percentage'],
-            text=result_module['Percentage'],
-            hoverinfo='x+y+text',
-            marker=dict(color=[colors_scale[color] for color in result_module['Module']]),
-            textposition='auto'
-        ), row=1, col=2
-    )
-
-    fig.update_xaxes(title_text="Taken Module", row=1, col=1)
-    fig.update_yaxes(title_text="Quantity [Students]", row=1, col=1)
-
-    fig.update_xaxes(title_text="Result", row=1, col=2)
-    fig.update_yaxes(title_text="Quantity [Students]", row=1, col=2)
-
-    fig.update_annotations(
-        {'text': 'Distribution - Taken Module', 'x': 0.5, 'xref': 'paper', 'y': 1.05, 'yref': 'paper'},
-        selector=dict(row=1, col=1))
-    fig.update_annotations({'text': 'Distribution - Result', 'x': 0.5, 'xref': 'paper', 'y': 1.05, 'yref': 'paper'},
-                           selector=dict(row=1, col=2))
-    fig.update_traces(barmode='stack', selector=dict(row=1, col=2))
-
-    fig.show()
-
-
-def visualization2(course_data, result_course):
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('Period Distribution', 'Result Distribution'))
-
-    colors_scale = {
-        '2013B': 'blue',
-        '2013J': 'orange',
-        '2014B': 'green',
-        '2014J': 'red',
-    }
-
-    fig.add_trace(
-        go.Bar(
-            x=course_data['Period'],
-            y=course_data['Quantity'],
-            text=course_data['Percentage'],
-            hoverinfo='x+y+text',
-            marker=dict(color=[colors_scale[color] for color in course_data['Period']]),
-            textposition='auto'
-        ), row=1, col=1)
-
-    fig.add_trace(
-        go.Bar(
-            x=result_course['Result'],
-            y=result_course['Percentage'],
-            text=result_course['Percentage'],
-            hoverinfo='x+y+text',
-            marker=dict(color=[colors_scale[color] for color in result_course['Period']]),
-            textposition='auto'
-        ), row=1, col=2
-    )
-
-    fig.update_xaxes(title_text="Taken Period", row=1, col=1)
-    fig.update_yaxes(title_text="Quantity [Students]", row=1, col=1)
-
-    fig.update_xaxes(title_text="Result", row=1, col=2)
-    fig.update_yaxes(title_text="Quantity [Students]", row=1, col=2)
-
-    fig.update_annotations(
-        {'text': 'Distribution - Taken Period', 'x': 0.5, 'xref': 'paper', 'y': 1.05, 'yref': 'paper'},
-        selector=dict(row=1, col=1))
-    fig.update_annotations({'text': 'Distribution - Result', 'x': 0.5, 'xref': 'paper', 'y': 1.05, 'yref': 'paper'},
-                           selector=dict(row=1, col=2))
-    fig.update_traces(barmode='stack', selector=dict(row=1, col=2))
-
-    fig.show()
+    model.fit(x_train, y_train, epochs=10, batch_size=32, validation_split=0.2)
+    loss, accuracy = model.evaluate(x_test, y_test)
+    print(f"Test accuracy: {accuracy}")
 
 
 if __name__ == '__main__':
-    _student_info = pd.read_csv('studentInfo.csv')
-    _assessment = pd.read_csv('assessments.csv')
-    _course = pd.read_csv('courses.csv')
-    _student_assessment = pd.read_csv('studentAssessment.csv')
-    _student_registration = pd.read_csv('studentRegistration.csv')
-    _student_vle = pd.read_csv('studentVle.csv')
-    _vle = pd.read_csv('vle.csv')
+    df = pd.read_csv('studentInfo.csv')
+    df = df[['region', 'highest_education', 'imd_band', 'age_band', 'studied_credits', 'disability', 'final_result']]
+    df['final_result'] = df['final_result'].apply(lambda x: 'pass' if x in ['pass', 'Distinction'] else 'fail')
+    df = df[df['imd_band'].notna()]
+    df['imd_band'].fillna('ValueToReplaceMissing', inplace=True)
 
-    module_datas, result_modules, course_datas, result_courses = student_info(_student_info)
-    # visualization1(module_data=module_datas, result_module=result_modules)
-    visualization2(course_data=course_datas, result_course=result_courses)
+    pd.set_option('display.max_columns', None)
+    print(df)
 
+    _x_train, _x_test, _y_train, _y_test = preprocessing(df)
+    modeling(_x_train, _x_test, _y_train, _y_test)
